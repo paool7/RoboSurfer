@@ -1,0 +1,16 @@
+PODS:
+  - DSWaveformImage (5.0.1)
+
+DEPENDENCIES:
+  - DSWaveformImage (~> 5.0)
+
+SPEC REPOS:
+  https://github.com/cocoapods/specs.git:
+    - DSWaveformImage
+
+SPEC CHECKSUMS:
+  DSWaveformImage: 8698cd91ceb292a9de7938114c68e782ff229ee6
+
+PODFILE CHECKSUM: 9300839f253edb40c11e014b245e2b4544b1adf0
+
+COCOAPODS: 1.5.3
