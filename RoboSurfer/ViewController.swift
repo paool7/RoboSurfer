@@ -15,19 +15,16 @@ import DSWaveformImage
 class ViewController: UIViewController, UITextFieldDelegate, UITableViewDelegate, UITableViewDataSource {
     @IBOutlet weak var waveformImage: UIImageView!
     @IBOutlet weak var classificationLabel: UILabel!
-    @IBOutlet weak var recordingURL: UITextField!
-
-    var recordingArray: [String] = []
+    @IBOutlet weak var modeSwitch: UISwitch!
+    @IBOutlet weak var tableView: UITableView!
+    
+    let nameArray = ["a", "b", "c", "d", "e", "a unprocessed", "b unprocessed", "c unprocessed", "d unprocessed", "e unprocessed"]
+    
+    var waveformMode = false
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        
-        getRecordings()
     }
-    @IBAction func setURL(_ sender: UITextField) {
-        self.downloadAudio(url: sender.text!)
-    }
-    
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
         // User finished typing (hit return): hide the keyboard.
         textField.resignFirstResponder()
@@ -39,7 +36,7 @@ class ViewController: UIViewController, UITextFieldDelegate, UITableViewDelegate
             DispatchQueue.global(qos: .userInitiated).async {
                 let handler = VNImageRequestHandler(ciImage: ciImage, options: [:])
                 do {
-                    let model = try VNCoreMLModel(for: ImageClassifier().model)
+                    let model = try VNCoreMLModel(for: self.waveformMode ? ImageClassifier().model : SpeClassifier().model)
                     
                     let request = VNCoreMLRequest(model: model, completionHandler: { [weak self] request, error in
                         DispatchQueue.main.async {
@@ -50,8 +47,8 @@ class ViewController: UIViewController, UITextFieldDelegate, UITableViewDelegate
                                     self?.classificationLabel.text = "No matching robocall"
                                 } else {
                                     let classification = classifications.first
-                                    
-                                    self?.classificationLabel.text = "\(classification!.identifier)- \(classification!.confidence)"
+                                    let confidence = classification!.confidence * 100
+                                    self?.classificationLabel.text = "\(classification!.identifier)- \(confidence)%"
                                 }
                             }
                         }
@@ -66,76 +63,53 @@ class ViewController: UIViewController, UITextFieldDelegate, UITableViewDelegate
     }
     
     func createWaveform(index: Int?, url: URL?) {
-        let audioURL = url != nil ? url : Bundle.main.url(forResource: recordingArray[index!], withExtension: "mp3")!
-        
-        if let audioURL = audioURL {
-            let waveform = Waveform(audioAssetURL: audioURL)!
-            let configuration = WaveformConfiguration(size: CGSize(width: 1000, height: 500),
-                                                      color: UIColor.black,
-                                                      style: .gradient,
-                                                      position: .middle)
-            
-            DispatchQueue.global(qos: .userInitiated).async {
+        let audioURL = url != nil ? url : Bundle.main.url(forResource: nameArray[index!], withExtension: "mp3")!
+        DispatchQueue.global(qos: .userInitiated).async {
+            if let audioURL = audioURL {
+                let waveform = Waveform(audioAssetURL: audioURL)!
+                let configuration = WaveformConfiguration(size: CGSize(width: 1000, height: 500),
+                                                          color: UIColor.black,
+                                                          style: .gradient,
+                                                          position: .middle)
+                
                 let image = UIImage(waveform: waveform, configuration: configuration)
                 DispatchQueue.main.async {
                     self.waveformImage.image = image
-//                    UIImageWriteToSavedPhotosAlbum(image!, nil, nil, nil)
+               //     UIImageWriteToSavedPhotosAlbum(image!, nil, nil, nil)
                     self.classify(image: image!)
                 }
             }
         }
     }
     
-    func downloadAudio(url: String) {
-        if let audioUrl = NSURL(string: url) {
-            let documentsDirectoryURL =  FileManager().urls(for: .documentDirectory, in: .userDomainMask).first!
-            
-            let path = documentsDirectoryURL.appendingPathComponent(audioUrl.lastPathComponent ?? "audio.mp3")
-            
-            if !FileManager().fileExists(atPath: path.path)  {
-                URLSession.shared.downloadTask(with: audioUrl as URL, completionHandler: { (location, response, error) -> Void in
-                    guard let location = location, error == nil else { return }
-                    do {
-                        try FileManager().moveItem(at: location, to: path)
-                        self.createWaveform(index: 0, url: path)
-                    } catch let error as NSError {
-                        print(error.localizedDescription)
-                    }
-                }).resume()
-            }
-        }
-    }
-    
-    func getRecordings() {
-        let enumerator = FileManager.default.enumerator(atPath: Bundle.main.resourcePath!)
-        var filePaths: [String] = []
-        
-        while let filePath = enumerator?.nextObject() as? String {
-            
-            if URL(fileURLWithPath: filePath).pathExtension == "mp3" {
-                let name = filePath.replacingOccurrences(of: ".mp3", with: "")
-                filePaths.append(name)
-            }
-        }
-        recordingArray = filePaths
-        
-//        for i in 0..<recordingArray.count {
-            createWaveform(index: 2, url: nil)
-//        }
+    @IBAction func modeChanged(_ sender: Any) {
+        self.waveformMode = modeSwitch.isOn
+        self.classificationLabel.text = ""
+        self.waveformImage.image = nil
     }
     
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return self.recordingArray.count
+        return self.nameArray.count
     }
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath)
-        cell.textLabel?.text = self.recordingArray[indexPath.row]
+        cell.textLabel?.text = self.nameArray[indexPath.row]
         return cell
     }
     
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        createWaveform(index: indexPath.row, url: nil)
+        self.classificationLabel.text = ""
+        self.waveformImage.image = nil
+        if self.waveformMode {
+            createWaveform(index: indexPath.row, url: nil)
+        } else {
+            let path = Bundle.main.path(forResource: self.nameArray[indexPath.row], ofType: "png")
+            if let image = UIImage(contentsOfFile: path ?? "") {
+                self.waveformImage.image = image
+                classify(image: image)
+            }
+        }
     }
-
+    
 }
